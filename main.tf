@@ -90,14 +90,14 @@ resource "aws_key_pair" "ec2_keypair" {
   }
 }
 
-resource "aws_ebs_volume" "ec2_ebs" {
-  availability_zone = var.az1
-  size              = 250
-  tags = {
-    "Name"        = "Rensair_Prod_Volume",
-    "Environment" = "Rensair_Prod"
-  }
-}
+# resource "aws_ebs_volume" "ec2_ebs" {
+#   availability_zone = var.az1
+#   size              = 250
+#   tags = {
+#     "Name"        = "Rensair_Prod_Volume",
+#     "Environment" = "Rensair_Prod"
+#   }
+# }
 
 resource "aws_instance" "ec2" {
   ami                         = var.ec2_ami
@@ -107,17 +107,23 @@ resource "aws_instance" "ec2" {
   key_name                    = aws_key_pair.ec2_keypair.id
   availability_zone           = var.az1
 
+  root_block_device {
+    volume_size           = "250"
+    volume_type           = "gp2"
+    delete_on_termination = "false"
+  }
+
   tags = {
     "Name"        = "Rensair_Prod_Keypair",
     "Environment" = "Rensair_Prod"
   }
 }
 
-resource "aws_volume_attachment" "ec2_ebs_volume_attachment" {
-  device_name = "dev/sda1"
-  volume_id   = aws_ebs_volume.ec2_ebs.id
-  instance_id = aws_instance.ec2.id
-}
+# resource "aws_volume_attachment" "ec2_ebs_volume_attachment" {
+#   device_name = "dev/sda1"
+#   volume_id   = aws_ebs_volume.ec2_ebs.id
+#   instance_id = aws_instance.ec2.id
+# }
 
 resource "aws_eip_association" "ec2_eip_association" {
   instance_id   = aws_instance.ec2.id
@@ -271,13 +277,26 @@ resource "aws_lb_listener" "alb_listener_http" {
   }
 }
 
+data "aws_route53_zone" "solutions" {
+  name = "xelerate.solutions."
+}
+
 resource "aws_route53_record" "rensair_backend" {
   zone_id = var.hosted_zone_id
-  name    = "rensair-backend.${var.hosted_zone_name}"
+  name    = "rensair-backend.${data.aws_route53_zone.solutions.name}"
   type    = "A"
+
   alias {
     name                   = aws_alb.alb.dns_name
-    zone_id                = var.hosted_zone_id
-    evaluate_target_health = true
+    zone_id                = aws_alb.alb.zone_id
+    evaluate_target_health = false
   }
+}
+
+output "ec2_ip" {
+  value = aws_instance.ec2.public_ip
+}
+
+output "domain" {
+  value = aws_route53_record.rensair_backend.name
 }
